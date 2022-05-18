@@ -1,10 +1,11 @@
 from enum import Enum
 from typing import (
-    Callable,
     Generic,
+    Iterable,
     Optional,
     TypeVar,
 )
+from typing_extensions import Self
 
 
 __all__ = [
@@ -39,8 +40,8 @@ class Queue(Generic[T]):
 
     def __init__(
         self,
+        items: Optional[Iterable[T]] = None,
         *,
-        items: Optional[list[T]] = None,
         repeat: RepeatMode = RepeatMode.Off,
         index: int = 0
     ) -> None:
@@ -48,19 +49,18 @@ class Queue(Generic[T]):
         self._repeat = repeat
         self._index = index
 
-    def __iter__(self) -> 'Queue[T]':
+    def __iter__(self) -> Self:
         return self
 
     def __next__(self) -> T:
         if self._repeat == RepeatMode.Single:
             return self._items[self._index]
         else:
-            self._index += 1
-            if self._index > len(self._items):
+            if self._index >= len(self._items):
                 if self._repeat == RepeatMode.Off:
                     raise StopIteration
-                self._index %= len(self._items) + 1
-                return self._items[self._index - 1]
+                self._index %= len(self._items)
+            self._index += 1
             return self._items[self._index - 1]
 
     def __getitem__(self, key: int) -> T:
@@ -75,13 +75,13 @@ class Queue(Generic[T]):
     def __bool__(self) -> bool:
         return bool(self._items)
 
-    def __add__(self, other) -> 'Queue[T]':
+    def __add__(self, other) -> Self:
         return Queue(items=self._items + other._items)
 
     def __iadd__(self, other) -> None:
         self._items += other._items
 
-    def __mult__(self, times: int) -> 'Queue[T]':
+    def __mult__(self, times: int) -> Self:
         if not isinstance(times, int):
             raise TypeError('Queue can only be multiplied with an integer')
         return Queue(items=self._items*times)
@@ -111,6 +111,8 @@ class Queue(Generic[T]):
     def repeat(self, value: RepeatMode):
         if type(value) is not RepeatMode:
             raise TypeError("value must be of type RepeatMode")
+        if value == RepeatMode.Single and self._repeat != RepeatMode.Single:
+            self._index -= 1
         self._repeat = value
 
     @property
@@ -160,25 +162,29 @@ class Queue(Generic[T]):
 
     def remove(
         self,
-        key: T | Callable[[T], bool] = lambda _: True,
-        *,
-        count: int = 1
+        item: T,
     ) -> None:
         '''
-        Iterate through items and remove up to `count` items for which `key` returns True
+        Remove first instance of `item` found
 
         Automatically decrements index if the index a removed item was before current index
         '''
-        if key is None:
-            raise TypeError('Key must be a callable or type T')
-
-        if not callable(key):
-            for i, item in enumerate(self._items):
-                if item == key and count:
-                    self.pop(i)
-                    count -= 1
-                    return
-        for i, item in enumerate(self._items):
-            if key(item) and count:
+        for i, it in enumerate(self._items):
+            if it == item:
                 self.pop(i)
-                count -= 1
+
+
+if __name__ == '__main__':
+    # lazy testing
+    base = range(5, 15, 2)
+    q1 = Queue(base)
+    for _, item in zip(range(2), q1):
+        print(item)
+    print('-'*80, 'all')
+    q1.repeat = RepeatMode.All
+    for _, item in zip(range(10), q1):
+        print(item)
+    print('-'*80, 'single')
+    q1.repeat = RepeatMode.Single
+    for _, item2 in zip(range(3), q1):
+        print(item2)

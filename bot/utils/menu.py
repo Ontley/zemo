@@ -1,5 +1,3 @@
-from multiprocessing.sharedctypes import Value
-from typing import Iterable, Optional
 import discord
 from discord.ui import (
     button,
@@ -57,7 +55,7 @@ class ListMenu(View):
         title: str,
         description: str,
         per_page: int = 15,
-        timeout: Optional[float] = 180
+        timeout: float = 180
     ) -> None:
         super().__init__(timeout=timeout)
         self._embed = discord.Embed(
