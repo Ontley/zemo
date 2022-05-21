@@ -18,7 +18,7 @@ T = TypeVar('T')
 
 
 class RepeatMode(Enum):
-    Off = 'none'
+    Off = 'off'
     Single = 'single'
     All = 'all'
 
@@ -156,7 +156,7 @@ class Queue(Generic[T]):
         '''
         self._items.clear()
 
-    def pop(self, position: int) -> T:
+    def pop(self, position: Optional[int]) -> T:
         '''
         Remove the item at given position and return it
 

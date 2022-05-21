@@ -1,10 +1,12 @@
 import discord
+from typing import Optional
+from discord import Interaction
 from discord.ui import (
-    button,
     Button,
     Modal,
     TextInput,
-    View
+    View,
+    button
 )
 
 
@@ -21,7 +23,7 @@ class PageModal(Modal):
         self.add_item(self.page)
         self.menu = menu
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
+    async def on_submit(self, interaction: Interaction) -> None:
         if self.page.value is None:
             raise TypeError('Page is not set')
         await self.menu.edit(interaction, page=int(self.page.value) - 1)
@@ -51,6 +53,7 @@ class ListMenu(View):
     def __init__(
         self,
         items: list[str],
+        owner: Optional[discord.Member] = None,
         *,
         title: str,
         description: str,
@@ -63,6 +66,7 @@ class ListMenu(View):
             description=description
         )
         self._items = items
+        self.owner = owner
         self._basic_desc = description + ' \n\n '
         self._per_page = per_page
         self._page = -1
@@ -84,16 +88,19 @@ class ListMenu(View):
         self._embed.description = self._basic_desc + '\n'.join(items)
         self._embed.set_footer(text=f'{self._page + 1}/{self.max_pages}')
 
-    async def edit(self, interaction: discord.Interaction, *, page: int) -> None:
+    async def edit(self, interaction: Interaction, *, page: int) -> None:
         self.page = min(max(0, page), self.max_pages - 1)
         await interaction.response.edit_message(embed=self._embed)
 
-    async def start(self, interaction: discord.Interaction) -> None:
+    async def start(self, interaction: Interaction) -> None:
         self._interaction = interaction
         if interaction.response.is_done():
             raise RuntimeError('Menu was already started')
         self.page = 0
         await interaction.response.send_message(embed=self._embed, view=self)
+
+    async def interaction_check(self, interaction: Interaction) -> bool:
+        return interaction.user == self.owner
 
     @button(label='«')
     async def _first_page(self, interaction, button) -> None:
@@ -104,7 +111,7 @@ class ListMenu(View):
         await self.edit(interaction, page=self._page - 1)
 
     @button(label='Page')
-    async def _change_page(self, interaction: discord.Interaction, button: Button) -> None:
+    async def _change_page(self, interaction: Interaction, button: Button) -> None:
         await interaction.response.send_modal(PageModal(self))
 
     @button(label='›')

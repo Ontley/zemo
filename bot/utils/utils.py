@@ -1,9 +1,10 @@
 __all__ = [
-    'readable_time'
+    'to_readable_time',
+    'to_ordinal'
 ]
 
 
-def readable_time(seconds: int) -> str:
+def to_readable_time(seconds: int) -> str:
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     time = ''
@@ -20,9 +21,21 @@ def readable_time(seconds: int) -> str:
     return time
 
 
+def to_ordinal(n: int) -> str:
+    if n in range(11, 14):
+        return f'{n}th'
+    remainder = n % 10
+    ordinal = str(n)
+    if remainder == 1:
+        ordinal += 'st'
+    elif remainder == 2:
+        ordinal += 'nd'
+    elif remainder == 3:
+        ordinal += 'rd'
+    else:
+        ordinal += 'th'
+    return ordinal
+
+
 if __name__ == '__main__':
-    print(readable_time(5))
-    print(readable_time(60))
-    print(readable_time(423))
-    print(readable_time(3600*2 + 60))
-    print(readable_time(213312))
+    pass

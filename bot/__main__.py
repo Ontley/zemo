@@ -43,6 +43,8 @@ tree = app_commands.CommandTree(client)
 load_plugins(tree, directory='plugins', guilds=GUILD_IDS)
 
 # TODO: this should be made more shmurt, or maybe not cuz dev
+
+
 @client.event
 async def on_message(msg: discord.Message) -> None:
     if msg.content.strip() == 'sync':

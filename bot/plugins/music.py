@@ -5,14 +5,16 @@ import discord
 from random import shuffle
 from attrs import define
 from googleapiclient.discovery import build
-from discord import FFmpegPCMAudio, app_commands
+from discord import app_commands, Interaction, FFmpegPCMAudio
 from utils import (
-    readable_time,
-    user_and_bot_connected,
-    user_connected,
-    RepeatMode,
     ListMenu,
-    Queue
+    Queue,
+    RepeatMode,
+    bot_connected,
+    to_ordinal,
+    to_readable_time,
+    user_and_bot_connected,
+    user_connected
 )
 from dotenv import load_dotenv
 load_dotenv()
@@ -146,7 +148,7 @@ async def join_vc(vc: discord.VoiceChannel | discord.StageChannel) -> Player:
 @app_commands.command(name='join', description='Join your channel')
 @app_commands.guild_only()
 @user_connected()
-async def _join(interaction: discord.Interaction) -> None:
+async def _join(interaction: Interaction) -> None:
     player = players.get(id, None)
     user = interaction.user
     if player is None:
@@ -162,7 +164,7 @@ async def _join(interaction: discord.Interaction) -> None:
 
 @app_commands.command(name='leave', description='Leave the channel and remove the queue')
 @app_commands.guild_only()
-async def _leave(interaction: discord.Interaction) -> None:
+async def _leave(interaction: Interaction) -> None:
     player = players[interaction.guild_id]
     await player.leave()
     await interaction.response.send_message('Leaving')
@@ -173,7 +175,7 @@ async def _leave(interaction: discord.Interaction) -> None:
 @app_commands.describe(query='What to search for')
 @app_commands.guild_only()
 @user_connected()
-async def _add(interaction: discord.Interaction, query: str) -> None:
+async def _add(interaction: Interaction, query: str) -> None:
     await interaction.response.defer()
     player = players.get(interaction.guild_id, None)
     if player is None:
@@ -192,7 +194,7 @@ async def _add(interaction: discord.Interaction, query: str) -> None:
 @app_commands.describe(mode='Looping mode')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _loop(interaction: discord.Interaction, mode: RepeatMode) -> None:
+async def _loop(interaction: Interaction, mode: RepeatMode) -> None:
     player = players[interaction.guild_id]
     player.queue.repeat = mode
     await interaction.response.send_message(f'Looping set to `{mode.value}`')
@@ -205,7 +207,7 @@ async def _loop(interaction: discord.Interaction, mode: RepeatMode) -> None:
 @app_commands.command(name='shuffle', description='Shuffle the queue')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _shuffle(interaction: discord.Interaction) -> None:
+async def _shuffle(interaction: Interaction) -> None:
     player = players[interaction.guild_id]
     shuffle(player.queue)
     await interaction.response.send_message('Shuffled the queue')
@@ -213,15 +215,15 @@ async def _shuffle(interaction: discord.Interaction) -> None:
 
 @app_commands.command(name='queue', description='Sends an embed with the queue list')
 @app_commands.guild_only()
-@user_and_bot_connected()
-async def _queue(interaction: discord.Interaction) -> None:
+@bot_connected()
+async def _queue(interaction: Interaction) -> None:
     player = players[interaction.guild_id]
     if not player.queue:
         await interaction.response.send_message('Nothing in queue')
         return
     songs = [
-        f'**{index}. **{song!s}  {readable_time(song.duration)}'
-        for index, song in enumerate(player.queue.items)
+        f'**{index}. **{song!s}  {to_readable_time(song.duration)}'
+        for index, song in enumerate(player.queue.items, start=1)
     ]
     m = ListMenu(
         items=songs,
@@ -231,11 +233,29 @@ async def _queue(interaction: discord.Interaction) -> None:
     await m.start(interaction)
 
 
+@app_commands.command(name='current', description='Currently playing song')
+@app_commands.guild_only()
+@bot_connected()
+async def _current(interaction: Interaction):
+    player = players[interaction.guild_id]
+    if not player.queue:
+        await interaction.response.send_message('Nothing in queue')
+        return
+    index, song = player.queue.current
+    description = f'{song!s} {to_readable_time(song.duration)}' \
+        + f'\n{to_ordinal(index + 1)} in queue'
+    embed = discord.Embed(
+        title='Currently playing',
+        description=description,
+    ).set_thumbnail(url=song.thumbnail)
+    await interaction.response.send_message(embed=embed)
+
+
 @app_commands.command(name='skip', description='Skip a certain number of songs')
 @app_commands.describe(offset='How far to skip')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _skip(interaction: discord.Interaction, offset: int = 1) -> None:
+async def _skip(interaction: Interaction, offset: int = 1) -> None:
     player = players[interaction.guild_id]
     player.queue.index += offset - 1
     await interaction.response.send_message('Skipped!')
@@ -246,7 +266,7 @@ async def _skip(interaction: discord.Interaction, offset: int = 1) -> None:
 @app_commands.describe(position='The position in queue to jump to')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _jump(interaction: discord.Interaction, position: int = 1) -> None:
+async def _jump(interaction: Interaction, position: int = 1) -> None:
     player = players[interaction.guild_id]
     if position not in range(len(player.queue) + 1):
         await interaction.response.send_message(f'Position {position} is out of range of the queue')
@@ -259,7 +279,7 @@ async def _jump(interaction: discord.Interaction, position: int = 1) -> None:
 @app_commands.command(name='pause', description='Pause playback')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _pause(interaction: discord.Interaction):
+async def _pause(interaction: Interaction):
     player = players[interaction.guild_id]
     player.voice_client.pause()
     await interaction.response.send_message('Paused')
@@ -268,18 +288,20 @@ async def _pause(interaction: discord.Interaction):
 @app_commands.command(name='resume', description='Resume playback')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _resume(interaction: discord.Interaction):
+async def _resume(interaction: Interaction):
     player = players[interaction.guild_id]
     player.voice_client.resume()
     await interaction.response.send_message('Resumed')
 
 
-@app_commands.command(name='remove', description='Removes a song from the queue')
-@app_commands.describe(position='Position of the song to remove')
+@app_commands.command(name='remove', description='Removes a song from the queue, removes the current song if called without argument')
+@app_commands.describe(position='Position of the song to remove, removes the current song if not given')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _remove(interaction: discord.Interaction, position: int):
+async def _remove(interaction: Interaction, position: int = None):
     player = players[interaction.guild_id]
+    if position is None:
+        position = player.queue.index + 1
     if position not in range(len(player.queue) + 1):
         await interaction.response.send_message(f'Position {position} is outside the range of the queue')
         return
@@ -290,7 +312,7 @@ async def _remove(interaction: discord.Interaction, position: int):
 @app_commands.command(name='clear', description='Clear the queue')
 @app_commands.guild_only()
 @user_and_bot_connected()
-async def _clear(interaction: discord.Interaction):
+async def _clear(interaction: Interaction):
     player = players[interaction.guild_id]
     player.queue.clear()
     await interaction.response.send_message('Cleared the queue')
