@@ -11,6 +11,7 @@ def load_plugins(
     directory: str,
     guilds=[
         discord.Object(id=967430088163467314),
+        discord.Object(id=802500942099382274),
     ]
 ) -> None:
     '''loads plugins from the given folder, ignoring pycache'''
@@ -39,7 +40,7 @@ load_plugins(tree, 'plugins')
 # TODO: this should be made more shmurt, or maybe not cuz dev
 @client.event
 async def on_message(msg: discord.Message) -> None:
-    if msg.content == 'sync':
+    if msg.content.strip() == 'sync':
         if msg.guild is None:
             return
         await tree.sync(guild=discord.Object(msg.guild.id))
