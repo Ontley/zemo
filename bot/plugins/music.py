@@ -7,10 +7,9 @@ from attrs import define
 from googleapiclient.discovery import build
 from discord import FFmpegPCMAudio, app_commands
 from utils import (
-    user_and_bot_connected,
-    bot_connected,
-    user_connected,
     readable_time,
+    user_and_bot_connected,
+    user_connected,
     RepeatMode,
     ListMenu,
     Queue
@@ -18,6 +17,8 @@ from utils import (
 from dotenv import load_dotenv
 load_dotenv()
 
+
+AUDIO_SOURCE_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 YOUTUBE_TOKEN = os.environ.get('YOUTUBE_TOKEN')
 if YOUTUBE_TOKEN is None:
     raise ValueError('No YOUTUBE_TOKEN found in environment')
@@ -118,7 +119,7 @@ class Player:
         except StopIteration:
             await self.start_timeout()
             return
-        source = FFmpegPCMAudio(song.url)
+        source = FFmpegPCMAudio(song.url, **AUDIO_SOURCE_OPTIONS)
         self._vc.play(source, after=self._after)
 
     async def start_timeout(self) -> None:
