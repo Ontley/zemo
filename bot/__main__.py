@@ -1,18 +1,23 @@
 import os
+import json
 import discord
+from os import path
+from typing import Sequence
 from importlib import import_module
 from discord import app_commands
 from dotenv import load_dotenv
 load_dotenv()
 
+with open('bot/bot_info.json', 'r') as bot_info_json:
+    guild_ids = json.load(bot_info_json)['guilds']
+    GUILD_IDS = list(map(discord.Object, guild_ids))
+
 
 def load_plugins(
     tree: app_commands.CommandTree,
+    *,
     directory: str,
-    guilds=[
-        discord.Object(id=967430088163467314),
-        discord.Object(id=802500942099382274),
-    ]
+    guilds: Sequence[discord.Object]
 ) -> None:
     '''loads plugins from the given folder, ignoring pycache'''
     plugin_path = f'{os.getcwd()}\\bot\\{directory}'
@@ -35,7 +40,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(application_id=967433475521118268, intents=intents)
 tree = app_commands.CommandTree(client)
-load_plugins(tree, 'plugins')
+load_plugins(tree, directory='plugins', guilds=GUILD_IDS)
 
 # TODO: this should be made more shmurt, or maybe not cuz dev
 @client.event

@@ -150,6 +150,12 @@ class Queue(Generic[T]):
         if position <= self._index:
             self.index += 1
 
+    def clear(self) -> None:
+        '''
+        Clear the queue
+        '''
+        self._items.clear()
+
     def pop(self, position: int) -> T:
         '''
         Remove the item at given position and return it
