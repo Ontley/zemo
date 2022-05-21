@@ -73,7 +73,7 @@ class Queue(Generic[T]):
         return item in self._items
 
     def __bool__(self) -> bool:
-        return bool(self._items)
+        return self._items != []
 
     def __add__(self, other) -> Self:
         return Queue(items=self._items + other._items)

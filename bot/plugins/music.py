@@ -1,16 +1,79 @@
-import discord
+import os
+import pytube
 import asyncio
+import discord
+from random import shuffle
+from attrs import define
+from googleapiclient.discovery import build
 from discord import FFmpegPCMAudio, app_commands
 from utils import (
-    bot_is_connected,
-    find_video,
-    user_is_connected,
+    user_and_bot_connected,
+    bot_connected,
+    user_connected,
     readable_time,
     RepeatMode,
     ListMenu,
-    Queue,
-    Song
+    Queue
 )
+from dotenv import load_dotenv
+load_dotenv()
+
+YOUTUBE_TOKEN = os.environ.get('YOUTUBE_TOKEN')
+if YOUTUBE_TOKEN is None:
+    raise ValueError('No YOUTUBE_TOKEN found in environment')
+
+
+class VideoNotFound(Exception):
+    pass
+
+
+@define(kw_only=True)
+class Song:
+    title: str
+    channel_name: int
+    thumbnail: str
+    page_url: str
+    url: str
+    duration: int
+
+    def __str__(self) -> str:
+        return f'[{self.title}]({self.page_url})'
+
+    def __repr__(self) -> str:
+        return f'Song([{self.title}]({self.page_url}))'
+
+
+def find_video(arg: str) -> Song:
+    '''Returns Song object with info extracted from first video found'''
+    with build('youtube', 'v3', developerKey=YOUTUBE_TOKEN) as yt_service:
+        request = yt_service.search().list(
+            part='snippet',
+            type='video',
+            maxResults=1,
+            q=arg
+        )
+        # wtf is the youtube api
+        items = request.execute()['items']
+        if not items:
+            raise VideoNotFound(f'Found no videos with search argument: {arg}')
+        video_id = items[0]['id']['videoId']
+
+    video = pytube.YouTube(f'http://youtube.com/watch?v={video_id}')
+    video.streams.get_audio_only().url
+
+    # pprint(video, best_audio)
+    return Song(
+        title=video.title,
+        channel_name=video.author,
+        thumbnail=video.thumbnail_url,
+        page_url=video.watch_url,
+        url=video.streams.get_audio_only().url,
+        duration=video.length
+    )
+
+
+if __name__ == '__main__':
+    find_video('amogus')
 
 
 class Player:
@@ -64,12 +127,9 @@ class Player:
         if self._dc_flag and self._vc.is_connected():
             await self.leave()
 
-    def stop(self) -> None:
-        self._vc.stop()
-
     async def leave(self) -> None:
+        self._vc.stop()
         await self._vc.disconnect()
-        del players[self._vc.guild.id]
 
 
 players: dict[int, Player] = {}
@@ -83,15 +143,14 @@ async def join_vc(vc: discord.VoiceChannel | discord.StageChannel) -> Player:
 
 @app_commands.command(name='join')
 @app_commands.guild_only()
-@user_is_connected()
+@user_connected()
 async def _join(interaction: discord.Interaction) -> None:
     player = players.get(id, None)
-    user_voice: discord.VoiceClient = interaction.user
+    user = interaction.user
     if player is None:
-        await join_vc(user_voice.channel)
+        await join_vc(user.voice.channel)
         await interaction.response.send_message('Joining your voice channel', ephemeral=True)
         return
-
     if player.voice_client.channel == interaction.user.voice.channel:
         await interaction.response.send_message('Already in your channel', ephemeral=True)
     else:
@@ -101,11 +160,9 @@ async def _join(interaction: discord.Interaction) -> None:
 
 @app_commands.command(name='leave')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
 async def _leave(interaction: discord.Interaction) -> None:
     player = players[interaction.guild_id]
-    player.leave()
+    await player.leave()
     await interaction.response.send_message('Leaving')
     del players[interaction.guild_id]
 
@@ -113,14 +170,16 @@ async def _leave(interaction: discord.Interaction) -> None:
 @app_commands.command(name='add')
 @app_commands.describe(query='What to search for')
 @app_commands.guild_only()
-@user_is_connected()
+@user_connected()
 async def _add(interaction: discord.Interaction, query: str) -> None:
     await interaction.response.defer()
     player = players.get(interaction.guild_id, None)
     if player is None:
         player = await join_vc(interaction.user.voice.channel)
-
-    song = find_video(query)
+    try:
+        song = find_video(query)
+    except VideoNotFound:
+        await interaction.edit_original_message(f'Couldn\'t find any videos from query `{query}`')
     player.queue.append(song)
     if not player.voice_client.is_playing():
         await player.start()
@@ -130,31 +189,34 @@ async def _add(interaction: discord.Interaction, query: str) -> None:
 @app_commands.command(name='loop')
 @app_commands.describe(mode='Looping mode')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
+@user_and_bot_connected()
 async def _loop(interaction: discord.Interaction, mode: RepeatMode) -> None:
     player = players[interaction.guild_id]
     player.queue.repeat = mode
-    if mode != RepeatMode.Off and not player.voice_client.is_playing():
-        await player.start()
     await interaction.response.send_message(f'Looping set to `{mode.value}`')
+    if player.queue:
+        if mode != RepeatMode.Off:
+            if not player.voice_client.is_playing():
+                await player.start()
+
+
+@app_commands.command(name='shuffle')
+@app_commands.guild_only()
+@user_and_bot_connected()
+async def _shuffle(interaction: discord.Interaction) -> None:
+    player = players[interaction.guild_id]
+    shuffle(player.queue)
+    await interaction.response.send_message('Shuffled the queue')
 
 
 @app_commands.command(name='queue')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
+@user_and_bot_connected()
 async def _queue(interaction: discord.Interaction) -> None:
-    # don't fucking ask what this shit is, because it doesn't even work due to discord
     player = players[interaction.guild_id]
-    longest_title = max(player.queue.items, key=lambda song: len(song.title))
-    longest_duration = max(player.queue.items, key=lambda song: len(
-        readable_time(song.duration)))
-    title_width = max(20, len(longest_title.title) + 10)
-    duration_width = len(readable_time(longest_duration.duration)) + 10
     songs = [
-        f'{song!s:{title_width}}{readable_time(song.duration):>{duration_width}}'
-        for song in player.queue.items
+        f'**{index}. **{song!s}  {readable_time(song.duration)}'
+        for index, song in enumerate(player.queue.items)
     ]
     m = ListMenu(
         items=songs,
@@ -167,8 +229,7 @@ async def _queue(interaction: discord.Interaction) -> None:
 @app_commands.command(name='forceskip')
 @app_commands.describe(offset='How far to skip')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
+@user_and_bot_connected()
 async def _fskip(interaction: discord.Interaction, offset: int = 1) -> None:
     player = players[interaction.guild_id]
     player.queue.index += offset - 1
@@ -179,8 +240,7 @@ async def _fskip(interaction: discord.Interaction, offset: int = 1) -> None:
 @app_commands.command(name='forcejump')
 @app_commands.describe(position='The position in queue to jump to (wraps around if larger than maximum)')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
+@user_and_bot_connected()
 async def _fjump(interaction: discord.Interaction, position: int = 1) -> None:
     player = players[interaction.guild_id]
     player.queue.index = position - 1
@@ -190,8 +250,7 @@ async def _fjump(interaction: discord.Interaction, position: int = 1) -> None:
 
 @app_commands.command(name='pause')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
+@user_and_bot_connected()
 async def _pause(interaction: discord.Interaction):
     player = players[interaction.guild_id]
     player.voice_client.pause()
@@ -200,8 +259,7 @@ async def _pause(interaction: discord.Interaction):
 
 @app_commands.command(name='resume')
 @app_commands.guild_only()
-@bot_is_connected()
-@user_is_connected()
+@user_and_bot_connected()
 async def _resume(interaction: discord.Interaction):
     player = players[interaction.guild_id]
     player.voice_client.resume()
