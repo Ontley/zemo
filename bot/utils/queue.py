@@ -139,7 +139,7 @@ class Queue(Generic[T]):
         return len(self._items)
 
     def __repr__(self) -> str:
-        """Queue(items: `Iterable[T]`, index: `int`)."""
+        """Return a representation of the Queue object"""
         return f'{type(self).__qualname__}({tuple(self._items)!r}, {self._index})'
 
     __hash__ = None
