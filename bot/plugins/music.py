@@ -173,7 +173,7 @@ async def _join(interaction: Interaction) -> None:
         await join_vc(user.voice.channel)
         await interaction.response.send_message('Joining your voice channel', ephemeral=True)
         return
-    if player.voice_client.channel == interaction.user.voice.channel:
+    elif player.voice_client.channel == interaction.user.voice.channel:
         await interaction.response.send_message('Already in your channel', ephemeral=True)
     else:
         # TODO: Swap channels menu, also don't lol and shid
@@ -209,7 +209,9 @@ async def _add(interaction: Interaction, query: str) -> None:
     try:
         song = find_video(query)
     except VideoNotFound:
-        await interaction.edit_original_message(content=f'Couldn\'t find any videos from query `{query}`')
+        await interaction.edit_original_message(
+            content=f'Couldn\'t find any videos from query `{query}`'
+        )
         return
     player.queue.append(song)
     if not player.voice_client.is_playing():

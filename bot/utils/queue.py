@@ -26,9 +26,9 @@ T = TypeVar('T')
 class RepeatMode(Enum):
     """Enum for Queue repeat modes."""
 
-    OFF = 'off'
-    SINGLE = 'single'
-    ALL = 'all'
+    Off = 'off'
+    Single = 'single'
+    All = 'all'
 
 
 class Queue(Generic[T]):
@@ -50,7 +50,7 @@ class Queue(Generic[T]):
         self,
         items: Optional[Iterable[T]] = None,
         *,
-        repeat: RepeatMode = RepeatMode.ALL,
+        repeat: RepeatMode = RepeatMode.All,
         index: int = 0
     ) -> None:
         self._items = [] if items is None else items
@@ -63,10 +63,10 @@ class Queue(Generic[T]):
 
     def __next__(self) -> T:
         """Get the next element from the Queue object."""
-        if self._repeat == RepeatMode.SINGLE:
+        if self._repeat == RepeatMode.Single:
             return self._items[self._index]
         if self._index >= len(self._items):
-            if self._repeat == RepeatMode.OFF:
+            if self._repeat == RepeatMode.Off:
                 raise StopIteration
             self._index %= len(self._items)
         self._index += 1
@@ -158,7 +158,7 @@ class Queue(Generic[T]):
     def repeat(self, value: RepeatMode):
         if not isinstance(value, RepeatMode):
             raise TypeError(f"value must be of type {RepeatMode.__qualname__}")
-        if value == RepeatMode.SINGLE and self._repeat != RepeatMode.SINGLE:
+        if value == RepeatMode.Single and self._repeat != RepeatMode.Single:
             self._index -= 1
         self._repeat = value
 
@@ -178,7 +178,7 @@ class Queue(Generic[T]):
     @property
     def current(self) -> tuple[int, T]:
         """Get current index and item."""
-        if self._repeat == RepeatMode.SINGLE:
+        if self._repeat == RepeatMode.Single:
             return self._index, self._items[self._index]
         return self._index - 1, self._items[self._index - 1]
 
