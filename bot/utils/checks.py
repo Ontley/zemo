@@ -1,3 +1,5 @@
+"""Various checks used for commands."""
+
 from discord import app_commands, Interaction
 
 
@@ -8,23 +10,16 @@ __all__ = [
 ]
 
 
-def _bot_connected(interaction: Interaction) -> bool:
-    # TODO: check bot connection without needing user's voice
-    return interaction.guild.me.voice is not None
-
-
-def _user_connected(interaction: Interaction) -> bool:
-    return interaction.user.voice is not None
-
-
 def user_and_bot_connected():
+    """Fails if either the user or bot aren't connected to the same channel."""
     async def predicate(interaction: Interaction) -> bool:
-        user_bool = _user_connected(interaction)
-        bot_bool = _bot_connected(interaction)
+        user_voice = interaction.user.voice
+        bot_voice = interaction.guild.me.voice
+
         msg = ''
-        if not user_bool:
+        if user_voice is None:
             msg = 'You are not connected to a voice channel\n'
-        if not bot_bool:
+        if bot_voice is None or bot_voice.channel != user_voice.channel:
             msg += '\nI\'m not connected to your voice channel'
         if msg:
             await interaction.response.send_message(msg, ephemeral=True)
@@ -34,18 +29,24 @@ def user_and_bot_connected():
 
 
 def user_connected():
+    """Fails if the user is not connected to a voice channel."""
     async def predicate(interaction: Interaction) -> bool:
-        if not _user_connected(interaction):
-            await interaction.response.send_message('You are not connected to a voice channel')
+        if interaction.user.voice is None:
+            await interaction.response.send_message(
+                'You are not connected to a voice channel'
+            )
             return False
         return True
     return app_commands.check(predicate)
 
 
 def bot_connected():
+    """Fails if the bot is not connected to voice channel."""
     async def predicate(interaction: Interaction) -> bool:
-        if not _user_connected(interaction):
-            await interaction.response.send_message('I\'m not connected to your voice channel')
+        if interaction.user.voice is None:
+            await interaction.response.send_message(
+                'I\'m not connected to your voice channel'
+            )
             return False
         return True
     return app_commands.check(predicate)

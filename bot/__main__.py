@@ -1,7 +1,6 @@
 import os
 import json
 import discord
-from os import path
 from typing import Sequence
 from importlib import import_module
 from discord import app_commands
@@ -19,7 +18,7 @@ def load_plugins(
     directory: str,
     guilds: Sequence[discord.Object]
 ) -> None:
-    '''loads plugins from the given folder, ignoring pycache'''
+    """Load plugins from the given folder, ignoring `__pycache__`."""
     plugin_path = f'{os.getcwd()}\\bot\\{directory}'
     for dirpath, _, filenames in os.walk(plugin_path):
         if '__pycache__' == dirpath:
@@ -41,8 +40,6 @@ intents.message_content = True
 client = discord.Client(application_id=967433475521118268, intents=intents)
 tree = app_commands.CommandTree(client)
 load_plugins(tree, directory='plugins', guilds=GUILD_IDS)
-
-# TODO: this should be made more shmurt, or maybe not cuz dev
 
 
 @client.event

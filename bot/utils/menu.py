@@ -1,5 +1,6 @@
+"""Provides discord.ui.View subtypes used to display information to users."""
+
 import discord
-from typing import Optional
 from discord import Interaction
 from discord.ui import (
     Button,
@@ -16,10 +17,14 @@ __all__ = [
 
 
 class PageModal(Modal):
+    """Modal sent when clicking Page button in ListMenu."""
+
     def __init__(self, menu, title='Change page') -> None:
         super().__init__(title=title)
         self.page: TextInput = TextInput(
-            label=f'Page number | from 1 to {menu.max_pages}', style=discord.TextStyle.short)
+            label=f'Page number | from 1 to {menu.max_pages}',
+            style=discord.TextStyle.short
+        )
         self.add_item(self.page)
         self.menu = menu
 
@@ -30,10 +35,10 @@ class PageModal(Modal):
 
 
 class ListMenu(View):
-    '''
-    An embed description-based list display with page changing through modals
+    """
+    An embed description-based list display with page changing through modals.
 
-    The text displayed is gathered through the items' str implementations
+    The text displayed is gathered through the items' str implementations.
 
     ----------
     Attributes
@@ -48,12 +53,12 @@ class ListMenu(View):
         The amount of items to display per page
     timeout: `Optional[float]`
         See `discord.ui.View.timeout`
-    '''
+    """
 
     def __init__(
         self,
         items: list[str],
-        owner: Optional[discord.Member] = None,
+        owner: discord.Member,
         *,
         title: str,
         description: str,
@@ -73,51 +78,80 @@ class ListMenu(View):
 
     @property
     def max_pages(self) -> int:
+        """Max pages of the menu."""
         pages, mod = divmod(len(self._items), self._per_page)
         return pages + 1 if mod else pages
 
     @property
     def page(self) -> int:
+        """Page number."""
         return self._page
 
-    @page.setter
-    def page(self, page: int):
-        self._page = min(max(0, page), self.max_pages)
+    def _update_page(self, page: int):
+        self._page = page
         items = map(
             str, self._items[page*self._per_page: (page + 1) * self._per_page])
         self._embed.description = self._basic_desc + '\n'.join(items)
         self._embed.set_footer(text=f'{self._page + 1}/{self.max_pages}')
 
     async def edit(self, interaction: Interaction, *, page: int) -> None:
-        self.page = min(max(0, page), self.max_pages - 1)
+        """Edit the menu's page and the discord embed."""
+        page = min(max(0, page), self.max_pages - 1)
+        self._update_page(page)
         await interaction.response.edit_message(embed=self._embed)
 
     async def start(self, interaction: Interaction) -> None:
-        self._interaction = interaction
+        """Start the view."""
         if interaction.response.is_done():
-            raise RuntimeError('Menu was already started')
-        self.page = 0
+            raise RuntimeError('Menu can only be started once')
+        self._update_page(0)
         await interaction.response.send_message(embed=self._embed, view=self)
 
     async def interaction_check(self, interaction: Interaction) -> bool:
-        return interaction.user == self.owner
+        """Fails if menu owner and interaction user are different."""
+        if interaction.user == self.owner:
+            return True
+        await interaction.response.send_message(
+            'Only the person who sent the queue command can control it',
+            ephemeral=True
+        )
 
     @button(label='«')
-    async def _first_page(self, interaction, button) -> None:
+    async def _first_page(
+        self,
+        interaction: Interaction,
+        button: Button
+    ) -> None:
         await self.edit(interaction, page=0)
 
     @button(label='‹')
-    async def _previous_page(self, interaction, button) -> None:
+    async def _previous_page(
+        self,
+        interaction: Interaction,
+        button: Button
+    ) -> None:
         await self.edit(interaction, page=self._page - 1)
 
     @button(label='Page')
-    async def _change_page(self, interaction: Interaction, button: Button) -> None:
+    async def _change_page(
+        self,
+        interaction: Interaction,
+        button: Button
+    ) -> None:
         await interaction.response.send_modal(PageModal(self))
 
     @button(label='›')
-    async def _next_page(self, interaction, button) -> None:
+    async def _next_page(
+        self,
+        interaction: Interaction,
+        button: Button
+    ) -> None:
         await self.edit(interaction, page=self._page + 1)
 
     @button(label='»')
-    async def _last_page(self, interaction, button) -> None:
+    async def _last_page(
+        self,
+        interaction: Interaction,
+        button: Button
+    ) -> None:
         await self.edit(interaction, page=self.max_pages - 1)

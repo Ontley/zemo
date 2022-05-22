@@ -1,3 +1,5 @@
+"""Various utility functions."""
+
 __all__ = [
     'to_readable_time',
     'to_ordinal'
@@ -5,6 +7,14 @@ __all__ = [
 
 
 def to_readable_time(seconds: int) -> str:
+    """
+    Convert a number of seconds into human readable time.
+
+    Examples:
+        - 60 -> 1m
+        - 61 -> 1m:1s
+        - 3601 -> 1h:1s
+    """
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     time = ''
@@ -22,6 +32,7 @@ def to_readable_time(seconds: int) -> str:
 
 
 def to_ordinal(n: int) -> str:
+    """Convert an integer to it's english ordinal representation."""
     if n in range(11, 14):
         return f'{n}th'
     remainder = n % 10
