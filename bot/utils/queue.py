@@ -167,7 +167,7 @@ class Queue(Generic[T]):
         """
         Get current index.
 
-        Setting the index out of the Queue bounds will wrap on `next()`.
+        Setting the index higher than Queue length will wrap on `next()` call.
         """
         return self._index
 
