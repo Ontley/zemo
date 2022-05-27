@@ -14,7 +14,6 @@ with open('bot/bot_info.json', 'r') as bot_info_json:
     GUILD_IDS = list(map(discord.Object, guild_ids))
 PLUGINS_DIR = 'plugins'
 
-
 class Bot(commands.Bot):
     @staticmethod
     def _get_plugins(directory: str) -> Iterable[ModuleType]:
@@ -60,6 +59,9 @@ class Bot(commands.Bot):
                     f'plugin \'{plugin.__name__}\' does not have a teardown function'
                 )
                 continue
+            # somehow passes if teardown is commented out before reload
+            # guessing it just keeps the previous version in the namespace
+            # and reload just overwrites the same names
             await plugin.teardown(self, guilds)
             await plugin.setup(self, guilds)
             print(f'reloaded \'{plugin.__name__}\'')
