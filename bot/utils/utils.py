@@ -11,9 +11,9 @@ def to_readable_time(seconds: int) -> str:
     Convert a number of seconds into human readable time.
 
     Examples:
-        - 60 -> 1m
-        - 61 -> 1m:1s
-        - 3601 -> 1h:1s
+    - `60 -> '1m'`
+    - `61 -> '1m:1s'`
+    - `3601 -> '1h:1s'`
     """
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)

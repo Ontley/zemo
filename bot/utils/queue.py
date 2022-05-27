@@ -38,7 +38,7 @@ class Queue(Generic[T]):
     ----------
     Attributes
     ----------
-    - items: `Optional[Iterable[T]]`
+    - items: `Optional[Iterable[T]]
         The list of items the queue contains
     - repeat: `RepeatMode`
         The repeat state
