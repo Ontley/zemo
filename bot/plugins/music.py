@@ -50,7 +50,7 @@ class Song:
         URL to the `youtube.com/watch/` page
     - url: `str`
         URL to the audio stream of the song
-    - duration: int
+    - duration: `int`
         Duration of the song in seconds
     """
 
@@ -119,7 +119,7 @@ class Player:
 
     def _after(self, e: Exception | None):
         if e is not None:
-            raise e
+            raise
         self._loop.create_task(self.start())
 
     async def start(self) -> None:
@@ -140,6 +140,9 @@ class Player:
         await asyncio.sleep(self._dc_timeout)
         if self._dc_flag and self._vc.is_connected():
             await self.leave()
+
+    async def stop_timeout(self) -> None:
+        self._dc_flag = False
 
     async def leave(self) -> None:
         """Leave the channel."""
@@ -368,6 +371,24 @@ class Music(commands.Cog):
         player = self.players[interaction.guild_id]
         player.queue.clear()
         await interaction.response.send_message('Cleared the queue')
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceClient,
+        after: discord.VoiceClient
+    ):
+        if member.bot:
+            return
+        player = self.players[member.guild.id]
+        if before is None and after is not None:
+            if after == member.guild.me.voice:
+                await player.stop_timeout()
+                return
+        members = before.channel.members
+        if all(member.bot for member in members):
+            await player.start_timeout()
 
 
 async def setup(client: commands.Bot, guilds: list[int]) -> None:

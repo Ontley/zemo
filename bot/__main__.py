@@ -14,6 +14,7 @@ with open('bot/bot_info.json', 'r') as bot_info_json:
     GUILD_IDS = list(map(discord.Object, guild_ids))
 PLUGINS_DIR = 'plugins'
 
+
 class Bot(commands.Bot):
     @staticmethod
     def _get_plugins(directory: str) -> Iterable[ModuleType]:
@@ -38,7 +39,7 @@ class Bot(commands.Bot):
         for plugin in Bot._get_plugins(directory):
             if not hasattr(plugin, 'setup'):
                 print(
-                    f'\Plugin \'{plugin.__name__}\' does not have a setup function'
+                    f'Plugin \'{plugin.__name__}\' does not have a setup function'
                 )
                 continue
             await plugin.setup(self, guilds)

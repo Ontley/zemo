@@ -63,14 +63,14 @@ class Queue(Generic[T]):
 
     def __next__(self) -> T:
         """Get the next element from the Queue object."""
-        if self._repeat == RepeatMode.Single:
-            return self._items[self._index]
         if self._index >= len(self._items):
             if self._repeat == RepeatMode.Off:
-                raise StopIteration
+                raise StopIteration('Queue exhausted')
             self._index %= len(self._items)
-        self._index += 1
-        return self._items[self._index - 1]
+        item = self._items[self.index]
+        if self._repeat != RepeatMode.Single:
+            self._index += 1
+        return item
 
     def __getitem__(self, index: int) -> T:
         """Get the item at the given index."""
