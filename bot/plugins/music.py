@@ -26,7 +26,7 @@ FFMPEG_SOURCE_OPTIONS = {
 }
 
 
-class VideoNotFound(Exception):
+class VideoNotFoundError(Exception):
     pass
 
 

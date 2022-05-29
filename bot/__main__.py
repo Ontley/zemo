@@ -18,6 +18,7 @@ PLUGINS_DIR = 'plugins'
 class Bot(commands.Bot):
     @staticmethod
     def _get_plugins(directory: str) -> Iterable[ModuleType]:
+        # FIXME: I feel like this is very dumb
         plugin_path = f'{os.getcwd()}\\bot\\{directory}'
         for dirpath, _, filenames in os.walk(plugin_path):
             if '__pycache__' == dirpath:
