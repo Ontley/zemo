@@ -5,6 +5,7 @@ See Queue class for more information.
 """
 
 from enum import Enum
+from timeit import repeat
 from typing import (
     Generic,
     Iterable,
@@ -53,7 +54,7 @@ class Queue(Generic[T]):
         repeat: RepeatMode = RepeatMode.All,
         index: int = 0
     ) -> None:
-        self._items = [] if items is None else items
+        self._items = [] if items is None else list(items)
         self._repeat = repeat
         self._index = index
 
@@ -65,14 +66,14 @@ class Queue(Generic[T]):
         """Get the next element from the Queue object."""
 
         # TODO: not worky
+        if self._repeat == RepeatMode.Single:
+            return self._items[self._index]
+        self._index += 1
         if self._index >= len(self._items):
             if self._repeat == RepeatMode.Off:
                 raise StopIteration('Queue exhausted')
             self._index %= len(self._items)
-        item = self._items[self.index]
-        if self._repeat != RepeatMode.Single:
-            self._index += 1
-        return item
+        return self._items[self._index]
 
     def __getitem__(self, index: int) -> T:
         """Get the item at the given index."""
@@ -224,3 +225,21 @@ class Queue(Generic[T]):
         for i, iitem in enumerate(self._items):
             if iitem == item:
                 self.pop(i)
+
+
+if __name__ == '__main__':
+    q = Queue((5, 7, 2, 9, 4, 8))
+    next(q)
+    next(q)
+    print('-------------\nSingle')
+    q.repeat = RepeatMode.Single
+    for _ in range(5):
+        print(next(q))
+    print('-------------\nAll')
+    q.repeat = RepeatMode.All
+    for _ in range(5):
+        print(next(q))
+    print('-------------\nOff')
+    q.repeat = RepeatMode.Off
+    for _ in range(10):
+        print(next(q))
