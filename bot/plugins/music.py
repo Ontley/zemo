@@ -72,7 +72,7 @@ def find_video(arg: str) -> Song:
     """Return Song object with info extracted from first video found."""
     results = pytube.Search(arg).results
     if not results:
-        raise VideoNotFound(f'Couldn\'t find video from query {arg}')
+        raise VideoNotFoundError(f'Couldn\'t find video from query {arg}')
     video = results[0]
     url = video.streams.get_audio_only().url
 
@@ -199,7 +199,7 @@ class Music(commands.Cog):
             player = await self.join_vc(interaction.user.voice.channel)
         try:
             song = find_video(query)
-        except VideoNotFound:
+        except VideoNotFoundError:
             await interaction.edit_original_message(
                 content=f'Couldn\'t find any videos from query `{query}`'
             )

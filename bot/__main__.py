@@ -18,26 +18,11 @@ class Bot(commands.Bot):
     """Inherits from `commands.Bot`."""
     def __init__(self,
         *args,
-        plugins_dir: str = 'plugins',
+        plugin_dir: str,
         **kwargs
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._plugins_dir = plugins_dir
-
-    @staticmethod
-    def _collect_plugins(directory: str) -> dict[str, ModuleType]:
-        plugin_path = f'{os.getcwd()}\\bot\\{directory}'
-        for dirpath, _, filenames in os.walk(plugin_path):
-            if '__pycache__' == dirpath:
-                continue
-            for file in filenames:
-                if file == '__init__.py' or not file.endswith('.py'):
-                    continue
-                ext_path = f'{dirpath}\\{file}'.replace('\\', '.')
-                start = ext_path.find(directory)
-                ext_path = ext_path[start: -3]
-                ext = importlib.import_module(ext_path)
-                yield ext
+        self._plugins_dir = plugin_dir
 
     async def load_plugins(
         self,
@@ -73,7 +58,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = Bot(
     '+',
-    plugins_directory='plugins',
+    plugin_dir='plugins',
     application_id=967433475521118268,
     intents=intents
 )
