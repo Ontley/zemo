@@ -63,6 +63,8 @@ class Queue(Generic[T]):
 
     def __next__(self) -> T:
         """Get the next element from the Queue object."""
+
+        # TODO: not worky
         if self._index >= len(self._items):
             if self._repeat == RepeatMode.Off:
                 raise StopIteration('Queue exhausted')
