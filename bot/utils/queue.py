@@ -68,12 +68,13 @@ class Queue(Generic[T]):
         # TODO: not worky
         if self._repeat == RepeatMode.Single:
             return self._items[self._index]
-        self._index += 1
         if self._index >= len(self._items):
             if self._repeat == RepeatMode.Off:
                 raise StopIteration('Queue exhausted')
             self._index %= len(self._items)
-        return self._items[self._index]
+        item = self._items[self._index]
+        self._index += 1
+        return item
 
     def __getitem__(self, index: int) -> T:
         """Get the item at the given index."""
@@ -163,6 +164,8 @@ class Queue(Generic[T]):
             raise TypeError(f"value must be of type {RepeatMode.__qualname__}")
         if value == RepeatMode.Single and self._repeat != RepeatMode.Single:
             self._index -= 1
+        elif value != RepeatMode.Single and self._repeat == RepeatMode.Single:
+            self._index += 1
         self._repeat = value
 
     @property
@@ -237,9 +240,13 @@ if __name__ == '__main__':
         print(next(q))
     print('-------------\nAll')
     q.repeat = RepeatMode.All
-    for _ in range(5):
+    for _ in range(7):
         print(next(q))
     print('-------------\nOff')
     q.repeat = RepeatMode.Off
-    for _ in range(10):
+    for _ in range(2):
+        print(next(q))
+    print('-------------\nSingle')
+    q.repeat = RepeatMode.Single
+    for _ in range(3):
         print(next(q))
