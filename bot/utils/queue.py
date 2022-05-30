@@ -254,21 +254,5 @@ class Queue(Generic[T]):
         for i, iitem in enumerate(self._items):
             if iitem == item:
                 del self._items[i]
-
-if __name__ == '__main__':
-    q = Queue(range(10))
-    it = iter(q)
-    print('---------\nAll')
-    q.jump(2)
-    for _ in range(3):
-        print(next(it))
-    print('---------\nSingle')
-    q.jump(2)
-    q.repeat = RepeatMode.Single
-    for _ in range(3):
-        print(next(it))
-    print('---------\nAll')
-    q.jump(2)
-    q.repeat = RepeatMode.All
-    for _ in range(3):
-        print(next(it))
+                if i < self._index:
+                    self._index -= 1
