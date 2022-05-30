@@ -1,3 +1,5 @@
+from multiprocessing.sharedctypes import Value
+import threading
 import pytube
 import asyncio
 import discord
@@ -37,20 +39,19 @@ class Song:
 
     Song objects are returned from `find_video` instead of being created manually.
 
-    ----------
     Attributes
     ----------
-    - title: `str`
+    title: `str`
         The title of the video
-    - channel_name: `str`
+    channel_name: `str`
         The name of the video uploader
-    - thumbnail: `str`
+    thumbnail: `str`
         URL to the thumbnail image
-    - page_url: `str`
+    page_url: `str`
         URL to the `youtube.com/watch/` page
-    - url: `str`
+    url: `str`
         URL to the audio stream of the song
-    - duration: `int`
+    duration: `int`
         Duration of the song in seconds
     """
 
@@ -90,7 +91,6 @@ class Player:
     """
     Wrapper class for controlling playback to a voice channel.
 
-    ----------
     Attributes
     ----------
     voice_client: `discord.VoiceClient`
@@ -106,11 +106,13 @@ class Player:
         queue: Queue[Song] = Queue(),
         timeout: float = 5
     ) -> None:
-        self._vc = voice_client
-        self._loop = voice_client.loop
-        self.queue = queue
-        self._dc_timeout = timeout
         self._dc_flag = False
+        self._dc_timeout = timeout
+        self.queue = queue
+        self.playing = threading.Event()
+        self._vc = voice_client
+        # needed because VoiceClient.play is non-blocking so it can not be used with a for loop
+        self._queue_gen = iter(queue)
 
     @property
     def voice_client(self) -> discord.VoiceClient:
@@ -120,19 +122,27 @@ class Player:
     def _after(self, e: Exception | None):
         if e is not None:
             raise
-        self._loop.create_task(self.start())
+        asyncio.run(self.start())
 
     async def start(self) -> None:
         """Start playing audio in the voice channel."""
         try:
-            song = next(self.queue)
+            song = next(self._queue_gen)
+            self.playing.set()
             self._dc_flag = False
         except StopIteration:
+            self.playing.set()
             await self.start_timeout()
             return
         source = FFmpegPCMAudio(song.url, **FFMPEG_SOURCE_OPTIONS)
         with suppress(discord.ClientException):
             self._vc.play(source, after=self._after)
+
+    def stop(self) -> None:
+        """Stop the player and block until next source is gathered"""
+        self.playing.clear()
+        self._vc.stop()
+        self.playing.wait()
 
     async def start_timeout(self) -> None:
         """Start a timer to disconnect the bot."""
@@ -218,10 +228,8 @@ class Music(commands.Cog):
         player = self.players[interaction.guild_id]
         player.queue.repeat = mode
         await interaction.response.send_message(f'Looping set to `{mode.value}`')
-        if player.queue:
-            if mode != RepeatMode.Off:
-                if not player.voice_client.is_playing():
-                    await player.start()
+        if player.queue and not player.voice_client.is_playing():
+            await player.start()
 
     @app_commands.command(name='shuffle')
     @app_commands.guild_only()
@@ -229,7 +237,7 @@ class Music(commands.Cog):
     async def _shuffle(self, interaction: Interaction) -> None:
         """Shuffle the queue"""
         player = self.players[interaction.guild_id]
-        shuffle(player.queue)
+        player.queue.shuffle()
         await interaction.response.send_message('Shuffled the queue')
 
     @app_commands.command(name='queue')
@@ -262,7 +270,8 @@ class Music(commands.Cog):
         if not player.queue:
             await interaction.response.send_message('Nothing in queue')
             return
-        index, song = player.queue.current
+        q = player.queue
+        index, song = q.index, q.current
         description = f'{song}\nDuration: {to_readable_time(song.duration)}\n{to_ordinal(index + 1)} in queue'
         embed = discord.Embed(
             title='Currently playing',
@@ -277,9 +286,9 @@ class Music(commands.Cog):
     async def _skip(self, interaction: Interaction, offset: int = 1) -> None:
         """Skip a certain number of songs, negative values allowed"""
         player = self.players[interaction.guild_id]
-        player.queue.index += offset
-        player.voice_client.stop()
-        _, song = player.queue.current
+        player.queue.skip(offset)
+        player.stop()
+        song = player.queue.current
         await interaction.response.send_message(f'Skipped to `{song.title}`!')
 
     @app_commands.command(name='jump')
@@ -289,14 +298,15 @@ class Music(commands.Cog):
     async def _jump(self, interaction: Interaction, position: int) -> None:
         """Jump to a certain position in the queue"""
         player = self.players[interaction.guild_id]
-        if position not in range(len(player.queue) + 1):
+        try:
+            player.queue.jump(position - 1)
+        except ValueError:
             await interaction.response.send_message(
                 f'Position {position} is out of range of the queue'
             )
             return
-        player.queue.index = position - 1
-        player.voice_client.stop()
-        _, song = player.queue.current
+        player.stop()
+        song = player.queue.current
         await interaction.response.send_message(f'Jumped to `{song.title}`')
 
     @app_commands.command(name='pause')
@@ -351,10 +361,12 @@ class Music(commands.Cog):
         after: discord.VoiceClient
     ):
         if member.bot:
-            if member == member.guild.me:
+            if member == member.guild.me and after is None:
                 del self.players[member.guild.id]
             return
-        player = self.players[member.guild.id]
+        player = self.players.get(member.guild.id, None)
+        if player is None:
+            return
         if before is None and after is not None:
             if after == member.guild.me.voice:
                 await player.stop_timeout()

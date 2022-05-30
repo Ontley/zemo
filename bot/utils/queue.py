@@ -5,10 +5,11 @@ See Queue class for more information.
 """
 
 from enum import Enum
-from timeit import repeat
+from random import shuffle
 from typing import (
     Generic,
     Iterable,
+    Iterator,
     Optional,
     TypeVar,
 )
@@ -36,14 +37,13 @@ class Queue(Generic[T]):
     """
     A iterable, repeatable queue.
 
-    ----------
     Attributes
     ----------
-    - items: `Optional[Iterable[T]]
+    items: `Optional[Iterable[T]]`
         The list of items the queue contains
-    - repeat: `RepeatMode`
+    repeat: `RepeatMode`
         The repeat state
-    - index: `int`
+    index: `int`
         The current index
     """
 
@@ -57,24 +57,21 @@ class Queue(Generic[T]):
         self._items = [] if items is None else list(items)
         self._repeat = repeat
         self._index = index
+        self._jumped = False
+        self._advanced = False
 
-    def __iter__(self) -> Self:
+    def __iter__(self) -> Iterator[T]:
         """Get self as iterator."""
-        return self
-
-    def __next__(self) -> T:
-        """Get the next element from the Queue object."""
-
-        # TODO: not worky
-        if self._repeat == RepeatMode.Single:
-            return self._items[self._index]
-        if self._index >= len(self._items):
-            if self._repeat == RepeatMode.Off:
-                raise StopIteration('Queue exhausted')
-            self._index %= len(self._items)
-        item = self._items[self._index]
-        self._index += 1
-        return item
+        while True:
+            self._jumped = False
+            self._advanced = True
+            if self._index >= len(self._items):
+                if self._repeat == RepeatMode.Off:
+                    raise StopIteration('Queue exhausted')
+                self._index %= len(self._items)
+            yield self._items[self._index]
+            if self._repeat != RepeatMode.Single:
+                self._index += 1
 
     def __getitem__(self, index: int) -> T:
         """Get the item at the given index."""
@@ -143,8 +140,8 @@ class Queue(Generic[T]):
         return len(self._items)
 
     def __repr__(self) -> str:
-        """Return a representation of the Queue object"""
-        return f'{type(self).__qualname__}({tuple(self._items)!r}, {self._index})'
+        """Representation of the Queue object"""
+        return f'{type(self).__qualname__}({self._items}, {self._index})'
 
     __hash__ = None
 
@@ -162,10 +159,12 @@ class Queue(Generic[T]):
     def repeat(self, value: RepeatMode):
         if not isinstance(value, RepeatMode):
             raise TypeError(f"value must be of type {RepeatMode.__qualname__}")
-        if value == RepeatMode.Single and self._repeat != RepeatMode.Single:
-            self._index -= 1
-        elif value != RepeatMode.Single and self._repeat == RepeatMode.Single:
-            self._index += 1
+
+        if self._jumped:
+            if self._repeat == RepeatMode.Single and value != RepeatMode.Single:
+                self._index -= 1
+            if self._repeat != RepeatMode.Single and value == RepeatMode.Single:
+                self._index += 1
         self._repeat = value
 
     @property
@@ -173,20 +172,53 @@ class Queue(Generic[T]):
         """
         Get current index.
 
-        Setting the index higher than Queue length will wrap on `next()` call.
+        Setting the index higher than Queue length will wrap around.
+
+        If repeat is not Single, the next item will be the one ahead of set index,
+        use Queue.jump otherwise
         """
         return self._index
 
     @index.setter
     def index(self, value: int):
-        self._index = value
+        self._index = value % len(self._items)
+        self._advanced = False
 
     @property
-    def current(self) -> tuple[int, T]:
-        """Get current index and item."""
-        if self._repeat == RepeatMode.Single:
-            return self._index, self._items[self._index]
-        return self._index - 1, self._items[self._index - 1]
+    def current(self) -> T:
+        """Get current item."""
+        return self._items[self._index]
+
+    def jump(self, index: int) -> None:
+        """
+        Force next item to be at `index`, even if repeat mode is changed after.
+        
+        Raises
+        ------
+        `ValueError`: index is out of range
+        """
+        if index not in range(len(self)):
+            raise ValueError('index out of range')
+        self._jumped = True
+        if self._advanced and self._repeat != RepeatMode.Single:
+            index -= 1
+        self.index = index
+
+    def skip(self, offset: int = 1) -> None:
+        """Skip ahead, force next item to be at current index + `offset`"""
+        self._jumped = True
+        if self._advanced and self._repeat != RepeatMode.Single:
+            offset -= 1
+        self.index += offset
+
+    def shuffle(self) -> None:
+        """Shuffles the Queue in place, putting the current item T at position 1 (index 0), and shuffling the rest"""
+        curr_i, curr = self.index, self.current
+        self._items[0], self._items[curr_i] = curr, self._items[0]
+        lst = self._items[1: ]
+        shuffle(lst)
+        self._items[1: ] = lst
+        self._index = 0
 
     def append(self, item: T) -> None:
         """Append a value to the end of the queue."""
@@ -206,13 +238,13 @@ class Queue(Generic[T]):
         """Clear the queue."""
         self._items.clear()
 
-    def pop(self, position: Optional[int]) -> T:
+    def pop(self, position: int = -1) -> T:
         """
         Remove the item at given position and return it.
 
         Decrements index if removed item was before current index.
         """
-        if position <= self._index:
+        if position <= self._index and position != -1:
             self._index -= 1
         return self._items.pop(position)
 
@@ -227,26 +259,22 @@ class Queue(Generic[T]):
         """
         for i, iitem in enumerate(self._items):
             if iitem == item:
-                self.pop(i)
-
+                del self._items[i]
 
 if __name__ == '__main__':
-    q = Queue((5, 7, 2, 9, 4, 8))
-    next(q)
-    next(q)
-    print('-------------\nSingle')
-    q.repeat = RepeatMode.Single
-    for _ in range(5):
-        print(next(q))
-    print('-------------\nAll')
-    q.repeat = RepeatMode.All
-    for _ in range(7):
-        print(next(q))
-    print('-------------\nOff')
-    q.repeat = RepeatMode.Off
-    for _ in range(2):
-        print(next(q))
-    print('-------------\nSingle')
+    q = Queue(range(10))
+    it = iter(q)
+    print('---------\nAll')
+    q.jump(2)
+    for _ in range(3):
+        print(next(it))
+    print('---------\nSingle')
+    q.jump(2)
     q.repeat = RepeatMode.Single
     for _ in range(3):
-        print(next(q))
+        print(next(it))
+    print('---------\nAll')
+    q.jump(2)
+    q.repeat = RepeatMode.All
+    for _ in range(3):
+        print(next(it))
