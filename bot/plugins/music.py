@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Value
 import threading
 import pytube
 import asyncio
@@ -195,6 +194,8 @@ class Music(commands.Cog):
         player = self.players[interaction.guild_id]
         await player.leave()
         await interaction.response.send_message('Leaving')
+        player = self.players[interaction.guild_id]
+        player.queue.clear()
         del self.players[interaction.guild_id]
 
     @app_commands.command(name='add')

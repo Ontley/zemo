@@ -1,9 +1,3 @@
-"""
-Provides a Queue class, which can be iterated over in 3 different ways.
-
-See Queue class for more information.
-"""
-
 from enum import Enum
 from random import shuffle
 from typing import (

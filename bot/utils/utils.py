@@ -1,5 +1,3 @@
-"""Various utility functions."""
-
 __all__ = [
     'to_readable_time',
     'to_ordinal'

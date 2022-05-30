@@ -1,5 +1,3 @@
-"""Provides discord.ui.View subtypes used to display information to users."""
-
 import discord
 from discord import Interaction
 from discord.ui import (
