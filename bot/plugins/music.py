@@ -3,7 +3,6 @@ import pytube
 import asyncio
 import discord
 from contextlib import suppress
-from random import shuffle
 from attrs import define
 from discord import app_commands, Interaction, FFmpegPCMAudio
 from discord.ext import commands
