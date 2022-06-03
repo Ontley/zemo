@@ -1,15 +1,14 @@
 import importlib
 import os
 import json
-from types import ModuleType
-from typing import Sequence
 import discord
+from typing import Sequence
 from discord.ext import commands
 from dotenv import load_dotenv
 load_dotenv()
 
 
-with open('bot/bot_info.json', 'r') as bot_info_json:
+with open('bot\\bot_info.json', 'r') as bot_info_json:
     guild_ids = json.load(bot_info_json)['guilds']
     GUILD_IDS = list(map(discord.Object, guild_ids))
 
@@ -29,7 +28,7 @@ class Bot(commands.Bot):
         *,
         guilds: Sequence[discord.Object]
     ) -> None:
-        plugin_path = f'{os.getcwd()}\\bot\\{self._plugins_dir}'
+        plugin_path = f'bot\\{self._plugins_dir}'
         for dirpath, _, filenames in os.walk(plugin_path):
             if '__pycache__' == dirpath:
                 continue

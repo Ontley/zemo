@@ -155,9 +155,9 @@ class Queue(Generic[T]):
             raise TypeError(f"value must be of type {RepeatMode.__qualname__}")
 
         if self._jumped:
-            if self._repeat == RepeatMode.Single and value != RepeatMode.Single:
+            if self._repeat == RepeatMode.Single != value:
                 self._index -= 1
-            if self._repeat != RepeatMode.Single and value == RepeatMode.Single:
+            elif self._repeat != RepeatMode.Single == value:
                 self._index += 1
         self._repeat = value
 
@@ -234,11 +234,11 @@ class Queue(Generic[T]):
 
     def pop(self, position: int = -1) -> T:
         """
-        Remove the item at given position and return it.
+        Remove the item at given position (default last item) and return it.
 
         Decrements index if removed item was before current index.
         """
-        if position <= self._index and position != -1:
+        if self._index >= position != -1:
             self._index -= 1
         return self._items.pop(position)
 
