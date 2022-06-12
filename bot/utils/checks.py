@@ -31,7 +31,8 @@ def user_connected():
     async def predicate(interaction: Interaction) -> bool:
         if interaction.user.voice is None:
             await interaction.response.send_message(
-                'You are not connected to a voice channel'
+                'You are not connected to a voice channel',
+                ephemeral=True
             )
             return False
         return True
@@ -41,9 +42,10 @@ def user_connected():
 def bot_connected():
     """Fails if the bot is not connected to voice channel."""
     async def predicate(interaction: Interaction) -> bool:
-        if interaction.user.voice is None:
+        if interaction.guild.me.voice is None:
             await interaction.response.send_message(
-                'I\'m not connected to your voice channel'
+                'I\'m not connected to your voice channel',
+                ephemeral=True
             )
             return False
         return True
