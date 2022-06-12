@@ -15,11 +15,12 @@ with open('bot\\bot_info.json', 'r') as bot_info_json:
 
 class Bot(commands.Bot):
     """Inherits from `commands.Bot`."""
+
     def __init__(self,
-        *args,
-        plugin_dir: str,
-        **kwargs
-    ) -> None:
+                 *args,
+                 plugin_dir: str,
+                 **kwargs
+                 ) -> None:
         super().__init__(*args, **kwargs)
         self._plugins_dir = plugin_dir
 
