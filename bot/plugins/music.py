@@ -1,10 +1,13 @@
 import threading
+import time
 import pytube
-import asyncio
 import discord
-from contextlib import suppress
+import asyncio
+from typing import Any, Callable, Optional
 from attrs import define
 from discord import app_commands, Interaction, FFmpegPCMAudio
+from discord.enums import SpeakingState
+from discord.opus import Encoder as OpusEncoder
 from discord.ext import commands
 from utils import (
     ListMenu,
@@ -27,6 +30,10 @@ FFMPEG_SOURCE_OPTIONS = {
 
 
 class VideoNotFoundError(Exception):
+    pass
+
+
+class PlayerError(Exception):
     pass
 
 
@@ -85,7 +92,7 @@ def find_video(arg: str) -> Song:
     )
 
 
-class Player:
+class Player(threading.Thread):
     """
     Wrapper class for controlling playback to a voice channel.
 
@@ -97,65 +104,119 @@ class Player:
         An optional starting queue
     """
 
+    DELAY = OpusEncoder.FRAME_LENGTH / 1000.0
+
     def __init__(
         self,
         voice_client: discord.VoiceClient,
         *,
         queue: Queue[Song] = Queue(),
-        timeout: float = 5
+        timeout: float = 5,
+        on_error: Optional[Callable[[Optional[Exception]], Any]] = None
     ) -> None:
-        self._dc_flag = False
-        self._dc_timeout = timeout
+        threading.Thread.__init__(self)
+        self.daemon = True
+        self.client = voice_client.client
+        self.voice_client = voice_client
+        self.voice_client.encoder = OpusEncoder()
         self.queue = queue
-        self.playing = threading.Event()
-        self._vc = voice_client
-        # needed because VoiceClient.play is non-blocking so it can not be used with a for loop
-        self._queue_gen = iter(queue)
+        self.timeout = timeout
 
-    @property
-    def voice_client(self) -> discord.VoiceClient:
-        """Get the player's voice client."""
-        return self._vc
+        self.source = None
 
-    def _after(self, e: Exception | None):
-        if e is not None:
-            raise
-        asyncio.run(self.start())
+        self._lock = threading.Lock()
+        self._end = threading.Event()
+        self._source_set = threading.Event()
+        self._resumed = threading.Event()
+        self._resumed.set()
+        self._connected = voice_client._connected
 
-    async def start(self) -> None:
-        """Start playing audio in the voice channel."""
+        self.on_error = on_error
+
+    def _do_run(self):
+        self.loops = 0
+        self._start = time.perf_counter()
+        self._speak(SpeakingState.voice)
+
+        play = self.voice_client.send_audio_packet
+
+        for song in self.queue:
+            self._source_set.set()
+            self.source = FFmpegPCMAudio(song.url)
+            self._end.clear()
+            while not self._end.is_set():
+                if not self._resumed.is_set():
+                    self._resumed.wait()
+                    continue
+
+                if not self._connected.is_set():
+                    self._connected.wait()
+                    self.loops = 0
+                    self._start = time.perf_counter()
+
+                self.loops += 1
+
+                data = self.source.read()
+                if not data:
+                    self._end.set()
+                    break
+
+                play(data, encode=not self.source.is_opus())
+                next_time = self._start + self.DELAY * self.loops
+                delay = max(0, self.DELAY + (next_time - time.perf_counter()))
+                time.sleep(delay)
+
+    def run(self):
         try:
-            song = next(self._queue_gen)
-            self.playing.set()
-            self._dc_flag = False
-        except StopIteration:
-            self.playing.set()
-            await self.start_timeout()
-            return
-        source = FFmpegPCMAudio(song.url, **FFMPEG_SOURCE_OPTIONS)
-        with suppress(discord.ClientException):
-            self._vc.play(source, after=self._after)
+            self._do_run()
+        except Exception as e:
+            self._err = e
+        finally:
+            self._call_error()
+            self.source.cleanup()
 
-    def stop(self) -> None:
-        """Stop the player and block until next source is gathered"""
-        self.playing.clear()
-        self._vc.stop()
-        self.playing.wait()
+    def _call_error(self):
+        if self.on_error is None:
+            raise self._err
+        try:
+            self.on_error(self._err)
+        except Exception as err:
+            raise PlayerError('Player on_error raised exception') from err
 
-    async def start_timeout(self) -> None:
-        """Start a timer to disconnect the bot."""
-        self._dc_flag = True
-        await asyncio.sleep(self._dc_timeout)
-        if self._dc_flag and self._vc.is_connected():
-            await self.leave()
+    def stop(self, blocking: bool = True) -> None:
+        '''
+        Stop playing audio.
 
-    async def stop_timeout(self) -> None:
-        self._dc_flag = False
+        If blocking is True and the player is playing, block until the next source is gathered from queue
+        '''
+        if blocking and self.is_playing():
+            self._source_set.clear()
+        self._end.set()
+        self._resumed.set()
+        self._speak(SpeakingState.none)
+        self._source_set.wait()
 
-    async def leave(self) -> None:
-        """Leave the channel."""
-        self._vc.stop()
-        await self._vc.disconnect()
+    def pause(self, *, update_speaking: bool = True) -> None:
+        self._resumed.clear()
+        if update_speaking:
+            self._speak(SpeakingState.none)
+
+    def resume(self, *, update_speaking: bool = True) -> None:
+        self.loops = 0
+        self._start = time.perf_counter()
+        self._resumed.set()
+        if update_speaking:
+            self._speak(SpeakingState.voice)
+
+    def is_playing(self) -> bool:
+        return self.source is not None and self._resumed.is_set() and not self._end.is_set()
+
+    def is_paused(self) -> bool:
+        return not self._end.is_set() and not self._resumed.is_set()
+
+    def _speak(self, speaking: SpeakingState):
+        asyncio.run_coroutine_threadsafe(
+            self.voice_client.ws.speak(speaking), self.client.loop)
 
 
 class Music(commands.Cog):
@@ -215,8 +276,8 @@ class Music(commands.Cog):
             )
             return
         player.queue.append(song)
-        if not player.voice_client.is_playing():
-            await player.start()
+        if not player.is_playing():
+            player.start()
         await interaction.edit_original_message(content=f'Added `{song.title}` to queue')
 
     @app_commands.command(name='loop')
@@ -229,7 +290,7 @@ class Music(commands.Cog):
         player.queue.repeat = mode
         await interaction.response.send_message(f'Looping set to `{mode.value}`')
         if player.queue and not player.voice_client.is_playing():
-            await player.start()
+            player.start()
 
     @app_commands.command(name='shuffle')
     @app_commands.guild_only()
