@@ -186,7 +186,7 @@ class Queue(Generic[T]):
     def jump(self, index: int) -> None:
         """
         Force next item to be at `index`, even if repeat mode is changed after.
-        
+
         Raises
         ------
         `ValueError`: index is out of range
@@ -209,9 +209,9 @@ class Queue(Generic[T]):
         """Shuffles the Queue in place, putting the current item T at position 1 (index 0), and shuffling the rest"""
         curr_i, curr = self.index, self.current
         self._items[0], self._items[curr_i] = curr, self._items[0]
-        lst = self._items[1: ]
+        lst = self._items[1:]
         shuffle(lst)
-        self._items[1: ] = lst
+        self._items[1:] = lst
         self._index = 0
 
     def append(self, item: T) -> None:
