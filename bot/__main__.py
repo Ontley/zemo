@@ -1,9 +1,10 @@
-import importlib
-import os
-import json
 import discord
-from typing import Sequence
+import importlib
+import json
+import os
 from discord.ext import commands
+from typing import Sequence
+
 from dotenv import load_dotenv
 load_dotenv()
 

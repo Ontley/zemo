@@ -1,14 +1,14 @@
+import asyncio
+import discord
+import pytube
 import threading
 import time
-import pytube
-import discord
-import asyncio
-from typing import Any, Callable, Optional
 from attrs import define
 from discord import app_commands, Interaction, FFmpegPCMAudio
 from discord.enums import SpeakingState
-from discord.opus import Encoder as OpusEncoder
 from discord.ext import commands
+from discord.opus import Encoder as OpusEncoder
+from typing import Any, Callable, Optional
 from utils import (
     ListMenu,
     Queue,
@@ -19,6 +19,7 @@ from utils import (
     user_and_bot_connected,
     user_connected
 )
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -92,6 +93,9 @@ def find_video(arg: str) -> Song:
     )
 
 
+# Yes this is mostly stolen from the library itself
+# I just wanted to make a version which can work with a loop
+# and is a single thread instead of creating a thread per source
 class Player(threading.Thread):
     """
     Wrapper class for controlling playback to a voice channel.
@@ -104,7 +108,7 @@ class Player(threading.Thread):
         An optional starting queue
     on_error: `Optional[Callable[[Optional[Exception]], Any]]`
         A function run when the player errors
-    
+
     Attributes
     ----------
     client: `discord.ext.commands.Bot`
