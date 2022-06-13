@@ -96,12 +96,21 @@ class Player(threading.Thread):
     """
     Wrapper class for controlling playback to a voice channel.
 
-    Attributes
+    Parameters
     ----------
     voice_client: `discord.VoiceClient`
         The client of the bot's connection to a voice channel
-    queue: `Queue[T]`
+    queue: `Optional[Queue[T]]`
         An optional starting queue
+    on_error: `Optional[Callable[[Optional[Exception]], Any]]`
+        A function run when the player errors
+    
+    Attributes
+    ----------
+    client: `discord.ext.commands.Bot`
+        The client the player is running on
+    source: `Optional[discord.AudioSource]`
+        The currently playing source, None if the player hasn't been started
     """
 
     DELAY = OpusEncoder.FRAME_LENGTH / 1000.0
@@ -111,7 +120,6 @@ class Player(threading.Thread):
         voice_client: discord.VoiceClient,
         *,
         queue: Queue[Song] = Queue(),
-        timeout: float = 5,
         on_error: Optional[Callable[[Optional[Exception]], Any]] = None
     ) -> None:
         threading.Thread.__init__(self)
@@ -119,12 +127,10 @@ class Player(threading.Thread):
         self.client = voice_client.client
         self.voice_client = voice_client
         self.voice_client.encoder = OpusEncoder()
-        self.queue = queue
-        self.timeout = timeout
+        self.queue = Queue() if queue is None else queue
 
         self.source = None
 
-        self._lock = threading.Lock()
         self._end = threading.Event()
         self._source_set = threading.Event()
         self._resumed = threading.Event()
@@ -142,7 +148,7 @@ class Player(threading.Thread):
 
         for song in self.queue:
             self._source_set.set()
-            self.source = FFmpegPCMAudio(song.url)
+            self.source = FFmpegPCMAudio(song.url, **FFMPEG_SOURCE_OPTIONS)
             self._end.clear()
             while not self._end.is_set():
                 if not self._resumed.is_set():
@@ -185,7 +191,7 @@ class Player(threading.Thread):
 
     def stop(self, blocking: bool = True) -> None:
         '''
-        Stop playing audio.
+        Stop playing audio, automatically starts next song.
 
         If blocking is True and the player is playing, block until the next source is gathered from queue
         '''
@@ -414,34 +420,9 @@ class Music(commands.Cog):
         player.queue.clear()
         await interaction.response.send_message('Cleared the queue')
 
-    @commands.Cog.listener()
-    async def on_voice_state_update(
-        self,
-        member: discord.Member,
-        before: discord.VoiceClient,
-        after: discord.VoiceClient
-    ):
-        if member.bot:
-            if member == member.guild.me and after is None:
-                del self.players[member.guild.id]
-            return
-        player = self.players.get(member.guild.id, None)
-        if player is None:
-            return
-        if before is None and after is not None:
-            if after == member.guild.me.voice:
-                await player.stop_timeout()
-                return
-        members = before.channel.members
-        if all(member.bot for member in members):
-            await player.start_timeout()
-
 
 async def setup(client: commands.Bot, guilds: list[int]) -> None:
-    await client.add_cog(
-        Music(client),
-        guilds=guilds
-    )
+    await client.add_cog(Music(client), guilds=guilds)
 
 
 async def teardown(client: commands.Bot, guilds: list[int]) -> None:
