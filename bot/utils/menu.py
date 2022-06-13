@@ -38,8 +38,7 @@ class ListMenu(View):
 
     The text displayed is gathered through the items' str implementations.
 
-    ----------
-    Attributes
+    Parameters
     ----------
     items: `Iterable[T]`
         An iterable of items to display
