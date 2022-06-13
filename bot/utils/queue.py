@@ -31,7 +31,7 @@ class Queue(Generic[T]):
     """
     A iterable, repeatable queue.
 
-    Attributes
+    Parameters
     ----------
     items: `Optional[Iterable[T]]`
         The list of items the queue contains
