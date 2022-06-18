@@ -61,7 +61,7 @@ class Queue(Generic[T]):
             self._advanced = True
             if self._index >= len(self._items):
                 if self._repeat == RepeatMode.Off:
-                    raise StopIteration('Queue exhausted')
+                    break
                 self._index %= len(self._items)
             yield self._items[self._index]
             if self._repeat != RepeatMode.Single:
@@ -256,3 +256,10 @@ class Queue(Generic[T]):
                 del self._items[i]
                 if i < self._index:
                     self._index -= 1
+
+
+if __name__ == '__main__':
+    q = Queue(range(100))
+    q.repeat = RepeatMode.Off
+    for item in q:
+        print(item, end = ' ')

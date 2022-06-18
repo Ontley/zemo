@@ -1,4 +1,5 @@
 import asyncio
+from tkinter import W
 import discord
 import pytube
 import threading
@@ -124,6 +125,7 @@ class Player(threading.Thread):
         voice_client: discord.VoiceClient,
         *,
         queue: Queue[Song] = Queue(),
+        timeout: float = 15.0,
         on_error: Optional[Callable[[Optional[Exception]], Any]] = None
     ) -> None:
         threading.Thread.__init__(self)
@@ -134,6 +136,10 @@ class Player(threading.Thread):
         self.queue = Queue() if queue is None else queue
 
         self.source = None
+
+        self._active = threading.Event()
+        self._active.set()
+        self._timeout = timeout
 
         self._end = threading.Event()
         self._source_set = threading.Event()
@@ -150,31 +156,44 @@ class Player(threading.Thread):
 
         play = self.voice_client.send_audio_packet
 
-        for song in self.queue:
-            self._source_set.set()
-            self.source = FFmpegPCMAudio(song.url, **FFMPEG_SOURCE_OPTIONS)
-            self._end.clear()
-            while not self._end.is_set():
-                if not self._resumed.is_set():
-                    self._resumed.wait()
-                    continue
+        while self._connected.is_set():
+            self._active.wait()
+            for song in self.queue:
+                self._source_set.set()
+                self.source = FFmpegPCMAudio(song.url, **FFMPEG_SOURCE_OPTIONS)
+                self._end.clear()
+                while not self._end.is_set():
+                    if not self._resumed.is_set():
+                        self._resumed.wait()
+                        continue
 
-                if not self._connected.is_set():
-                    self._connected.wait()
-                    self.loops = 0
-                    self._start = time.perf_counter()
+                    if not self._connected.is_set():
+                        self._connected.wait()
+                        self.loops = 0
+                        self._start = time.perf_counter()
 
-                self.loops += 1
+                    self.loops += 1
 
-                data = self.source.read()
-                if not data:
-                    self._end.set()
-                    break
+                    data = self.source.read()
+                    if not data:
+                        self._end.set()
+                        break
 
-                play(data, encode=not self.source.is_opus())
-                next_time = self._start + self.DELAY * self.loops
-                delay = max(0, self.DELAY + (next_time - time.perf_counter()))
-                time.sleep(delay)
+                    play(data, encode=not self.source.is_opus())
+                    next_time = self._start + self.DELAY * self.loops
+                    delay = max(0, self.DELAY + (next_time - time.perf_counter()))
+                    time.sleep(delay)
+            asyncio.run_coroutine_threadsafe(self.start_timeout(), loop=self.voice_client.loop)
+
+    async def start_timeout(self):
+        self._active.clear()
+        await asyncio.sleep(self._timeout)
+        if not self._active.is_set():
+            self._active.set()
+            await self.leave()
+
+    def cancel_timeout(self):
+        self._active.set()
 
     def run(self):
         try:
@@ -184,6 +203,12 @@ class Player(threading.Thread):
         finally:
             self._call_error()
             self.source.cleanup()
+
+    def play(self):
+        if self.is_alive():
+            self._active.set()
+        else:
+            self.start()
 
     def _call_error(self):
         if self.on_error is None:
@@ -205,6 +230,9 @@ class Player(threading.Thread):
         self._resumed.set()
         self._speak(SpeakingState.none)
         self._source_set.wait()
+
+    async def leave(self) -> None:
+        await self.voice_client.disconnect()
 
     def pause(self, *, update_speaking: bool = True) -> None:
         self._resumed.clear()
@@ -230,7 +258,7 @@ class Player(threading.Thread):
 
 
 class Music(commands.Cog):
-    def __init__(self, client):
+    def __init__(self, client: commands.Bot):
         self.client = client
         self.players: dict[int, Player] = {}
 
@@ -287,7 +315,7 @@ class Music(commands.Cog):
             return
         player.queue.append(song)
         if not player.is_playing():
-            player.start()
+            player.play()
         await interaction.edit_original_message(content=f'Added `{song.title}` to queue')
 
     @app_commands.command(name='loop')
@@ -300,7 +328,7 @@ class Music(commands.Cog):
         player.queue.repeat = mode
         await interaction.response.send_message(f'Looping set to `{mode.value}`')
         if player.queue and not player.voice_client.is_playing():
-            player.start()
+            player.play()
 
     @app_commands.command(name='shuffle')
     @app_commands.guild_only()
@@ -321,7 +349,7 @@ class Music(commands.Cog):
             await interaction.response.send_message('Nothing in queue')
             return
         songs = [
-            f'**{index}. **{song}  {to_readable_time(song.duration)}'
+            f'**{index}. **{song} by {song.channel_name}'
             for index, song in enumerate(player.queue.items, start=1)
         ]
         m = ListMenu(
@@ -343,7 +371,12 @@ class Music(commands.Cog):
             return
         q = player.queue
         index, song = q.index, q.current
-        description = f'{song}\nDuration: {to_readable_time(song.duration)}\n{to_ordinal(index + 1)} in queue'
+        description = f'''
+            {song}
+            by {song.channel_name}
+            Duration: {to_readable_time(song.duration)}
+            {to_ordinal(index + 1)} in queue
+        '''
         embed = discord.Embed(
             title='Currently playing',
             description=description,
@@ -423,6 +456,26 @@ class Music(commands.Cog):
         player = self.players[interaction.guild_id]
         player.queue.clear()
         await interaction.response.send_message('Cleared the queue')
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState | None,
+        after: discord.VoiceState | None
+    ):
+        if member.bot:
+            if member.id == self.client.user.id and after is None:
+                print('beep')
+                self.players.pop(member.guild_id, None)
+            return
+        player = self.players[member.guild.id]
+        if after is not None and after.channel == player.voice_client.channel:
+            player.cancel_timeout()
+        else:
+            members = player.voice_client.channel.members
+            if all(user.bot for user in members):
+                await player.start_timeout()
 
 
 async def setup(client: commands.Bot, guilds: list[int]) -> None:
