@@ -44,7 +44,7 @@ def bot_connected():
     async def predicate(interaction: Interaction) -> bool:
         if interaction.guild.me.voice is None:
             await interaction.response.send_message(
-                'I\'m not connected to your voice channel',
+                'I\'m not connected to a voice channel',
                 ephemeral=True
             )
             return False
