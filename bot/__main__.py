@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Value
 import discord
 import importlib
 import json
@@ -19,10 +18,10 @@ class Bot(commands.Bot):
     """Inherits from `commands.Bot`."""
 
     def __init__(self,
-                 *args,
-                 plugin_dir: str,
-                 **kwargs
-                 ) -> None:
+        *args,
+        plugin_dir: str,
+        **kwargs
+    ) -> None:
         super().__init__(*args, **kwargs)
         self._plugins_dir = plugin_dir
 
